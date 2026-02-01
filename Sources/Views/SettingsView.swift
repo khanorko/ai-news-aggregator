@@ -8,7 +8,7 @@ struct SettingsView: View {
     @AppStorage("maxArticles") private var maxArticles = 500
     @AppStorage("enableNotifications") private var enableNotifications = true
     @AppStorage("explorationRate") private var explorationRate = 15.0
-    
+
     var body: some View {
         TabView {
             // General Settings
@@ -20,7 +20,7 @@ struct SettingsView: View {
             .tabItem {
                 Label("General", systemImage: "gear")
             }
-            
+
             // LLM Settings
             APISettingsTab(
                 anthropicAPIKey: $anthropicAPIKey,
@@ -28,6 +28,12 @@ struct SettingsView: View {
             )
             .tabItem {
                 Label("LLM", systemImage: "cpu")
+            }
+
+            // Summary Settings
+            SummarySettingsTab()
+            .tabItem {
+                Label("Summary", systemImage: "text.quote")
             }
             
             // Recommendations
@@ -273,6 +279,196 @@ struct APISettingsTab: View {
             await MainActor.run {
                 ollamaStatus = "Not running"
                 availableModels = []
+            }
+        }
+    }
+}
+
+// MARK: - Summary Settings
+
+struct SummarySettingsTab: View {
+    @AppStorage("summaryStyle") private var summaryStyle = "newsletter"
+    @AppStorage("customSummaryPrompt") private var customSummaryPrompt = ""
+    @State private var showPromptEditor = false
+
+    static let defaultPrompts: [String: String] = [
+        "newsletter": """
+            You are an AI news analyst writing for busy tech professionals. Summarize this article in 3-4 sentences using this structure:
+            1. WHAT: What happened or what is being discussed (1 sentence)
+            2. WHY IT MATTERS: Why this is significant for AI/tech (1 sentence)
+            3. KEY INSIGHT: The main takeaway or implication (1-2 sentences)
+            Write in a direct, informative style. No fluff. No questions. Just the summary.
+            """,
+        "tldr": """
+            Write a TL;DR summary in 1-2 sentences. Be extremely concise. Capture only the most important point.
+            """,
+        "sowhat": """
+            Summarize this article by first explaining why the reader should care, then the key facts. Start with "This matters because..." Format: 2-3 sentences.
+            """,
+        "bullets": """
+            Summarize this article as 3 bullet points:
+            • Main point
+            • Technical detail or context
+            • Implication for the industry
+            Output only the bullet points, nothing else.
+            """,
+        "executive": """
+            Write an executive brief in 4 sentences: Context → News → Analysis → Conclusion. Be professional and insightful.
+            """,
+        "hottake": """
+            Give a brief "hot take" opinion on this article (1 sentence), followed by the key facts (2 sentences). Be opinionated but fair.
+            """,
+        "custom": ""
+    ]
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Summary Style", selection: $summaryStyle) {
+                    HStack {
+                        Image(systemName: "newspaper")
+                        Text("Newsletter Style (Recommended)")
+                    }.tag("newsletter")
+
+                    HStack {
+                        Image(systemName: "bolt")
+                        Text("TL;DR (Ultra Short)")
+                    }.tag("tldr")
+
+                    HStack {
+                        Image(systemName: "questionmark.circle")
+                        Text("\"So What?\" Format")
+                    }.tag("sowhat")
+
+                    HStack {
+                        Image(systemName: "list.bullet")
+                        Text("Bullet Points")
+                    }.tag("bullets")
+
+                    HStack {
+                        Image(systemName: "briefcase")
+                        Text("Executive Brief")
+                    }.tag("executive")
+
+                    HStack {
+                        Image(systemName: "flame")
+                        Text("Hot Take + Facts")
+                    }.tag("hottake")
+
+                    HStack {
+                        Image(systemName: "pencil")
+                        Text("Custom Prompt")
+                    }.tag("custom")
+                }
+                .pickerStyle(.radioGroup)
+
+                // Preview of current style
+                GroupBox {
+                    Text(getPromptPreview())
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .lineLimit(4)
+                }
+            } header: {
+                Text("Summary Style")
+            } footer: {
+                Text("Choose how AI summarizes articles. Newsletter style gives structured, scannable summaries.")
+            }
+
+            Section {
+                Button("Edit Prompt for \"\(styleName(summaryStyle))\"") {
+                    if customSummaryPrompt.isEmpty && summaryStyle != "custom" {
+                        customSummaryPrompt = Self.defaultPrompts[summaryStyle] ?? ""
+                    }
+                    showPromptEditor = true
+                }
+
+                if summaryStyle != "custom" {
+                    Button("Reset to Default") {
+                        customSummaryPrompt = ""
+                    }
+                    .foregroundColor(.orange)
+                }
+            } header: {
+                Text("Customize")
+            }
+        }
+        .formStyle(.grouped)
+        .sheet(isPresented: $showPromptEditor) {
+            PromptEditorSheet(
+                prompt: $customSummaryPrompt,
+                styleName: styleName(summaryStyle),
+                defaultPrompt: Self.defaultPrompts[summaryStyle] ?? ""
+            )
+        }
+    }
+
+    private func styleName(_ style: String) -> String {
+        switch style {
+        case "newsletter": return "Newsletter"
+        case "tldr": return "TL;DR"
+        case "sowhat": return "So What?"
+        case "bullets": return "Bullets"
+        case "executive": return "Executive"
+        case "hottake": return "Hot Take"
+        case "custom": return "Custom"
+        default: return style
+        }
+    }
+
+    private func getPromptPreview() -> String {
+        if !customSummaryPrompt.isEmpty {
+            return String(customSummaryPrompt.prefix(200)) + "..."
+        }
+        return String((Self.defaultPrompts[summaryStyle] ?? "").prefix(200)) + "..."
+    }
+}
+
+// MARK: - Prompt Editor Sheet
+
+struct PromptEditorSheet: View {
+    @Binding var prompt: String
+    let styleName: String
+    let defaultPrompt: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("Edit \(styleName) Prompt")
+                    .font(.headline)
+                Spacer()
+                Button("Done") { dismiss() }
+            }
+
+            Text("Customize the instruction sent to the LLM. Use {title} and {content} as placeholders.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            TextEditor(text: $prompt)
+                .font(.system(size: 12, design: .monospaced))
+                .frame(minHeight: 200)
+                .border(Color.secondary.opacity(0.3))
+
+            HStack {
+                Button("Reset to Default") {
+                    prompt = defaultPrompt
+                }
+                .foregroundColor(.orange)
+
+                Spacer()
+
+                Button("Clear") {
+                    prompt = ""
+                }
+                .foregroundColor(.red)
+            }
+        }
+        .padding()
+        .frame(width: 500, height: 350)
+        .onAppear {
+            if prompt.isEmpty {
+                prompt = defaultPrompt
             }
         }
     }

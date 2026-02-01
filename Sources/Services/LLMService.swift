@@ -42,8 +42,15 @@ actor LLMService {
     
     func summarize(title: String, content: String) async -> String? {
         let articleContent = content.isEmpty ? title : String(content.prefix(2000))
+
+        // Get summary style from settings
+        let defaults = UserDefaults.standard
+        let style = defaults.string(forKey: "summaryStyle") ?? "newsletter"
+        let customPrompt = defaults.string(forKey: "customSummaryPrompt") ?? ""
+
+        let basePrompt = getPromptForStyle(style, customPrompt: customPrompt)
         let prompt = """
-        You are a news summarizer. Write a 1-2 sentence summary of this article. Only output the summary, nothing else. Do not ask questions or request more information.
+        \(basePrompt)
 
         Title: \(title)
         Content: \(articleContent)
@@ -51,23 +58,70 @@ actor LLMService {
         Summary:
         """
 
-        guard let result = await chat(prompt: prompt, maxTokens: 150) else {
+        guard let result = await chat(prompt: prompt, maxTokens: 300) else {
             return nil
         }
 
-        // Clean up the response - remove any conversational prefixes
-        let cleaned = result
+        // Clean up the response
+        var cleaned = result
             .replacingOccurrences(of: "Summary:", with: "")
+            .replacingOccurrences(of: "WHAT:", with: "")
+            .replacingOccurrences(of: "WHY IT MATTERS:", with: "")
+            .replacingOccurrences(of: "KEY INSIGHT:", with: "")
+            .replacingOccurrences(of: "1.", with: "")
+            .replacingOccurrences(of: "2.", with: "")
+            .replacingOccurrences(of: "3.", with: "")
             .replacingOccurrences(of: "Here is", with: "")
             .replacingOccurrences(of: "Here's", with: "")
             .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 
+        // Normalize whitespace
+        while cleaned.contains("  ") {
+            cleaned = cleaned.replacingOccurrences(of: "  ", with: " ")
+        }
+
         // If the model still asks for more info, generate a basic summary from title
-        if cleaned.contains("no article") || cleaned.contains("please share") || cleaned.contains("Can you") {
-            return "Article discusses: \(title)"
+        if cleaned.contains("no article") || cleaned.contains("please share") || cleaned.contains("Can you") || cleaned.contains("I'm happy to") {
+            return "This article discusses \(title.lowercased()). Click 'Read Original' for the full context."
         }
 
         return cleaned
+    }
+
+    private func getPromptForStyle(_ style: String, customPrompt: String) -> String {
+        // If custom prompt is set, use it
+        if !customPrompt.isEmpty {
+            return customPrompt
+        }
+
+        switch style {
+        case "newsletter":
+            return """
+            You are an AI news analyst writing for busy tech professionals. Summarize this article in 3-4 sentences using this structure:
+            1. WHAT: What happened or what is being discussed (1 sentence)
+            2. WHY IT MATTERS: Why this is significant for AI/tech (1 sentence)
+            3. KEY INSIGHT: The main takeaway or implication (1-2 sentences)
+            Write in a direct, informative style. No fluff. No questions. Just the summary.
+            """
+        case "tldr":
+            return "Write a TL;DR summary in 1-2 sentences. Be extremely concise. Capture only the most important point. No questions."
+        case "sowhat":
+            return "Summarize this article by first explaining why the reader should care, then the key facts. Start with \"This matters because...\" Format: 2-3 sentences. No questions."
+        case "bullets":
+            return """
+            Summarize this article as 3 bullet points:
+            • Main point
+            • Technical detail or context
+            • Implication for the industry
+            Output only the bullet points, nothing else. No questions.
+            """
+        case "executive":
+            return "Write an executive brief in 4 sentences: Context → News → Analysis → Conclusion. Be professional and insightful. No questions."
+        case "hottake":
+            return "Give a brief \"hot take\" opinion on this article (1 sentence), followed by the key facts (2 sentences). Be opinionated but fair. No questions."
+        default:
+            return "Summarize this article in 2-3 sentences. Be concise and informative. No questions."
+        }
     }
     
     func extractKeywords(title: String, content: String) async -> [String] {

@@ -2,6 +2,12 @@
 
 A native macOS news aggregator for AI/ML news with intelligent recommendations and filter-bubble breaking.
 
+## Credits
+
+- **Kristoffer Åström** – Original idea & architecture. Directed [Moltbot](https://github.com/moltbot/moltbot) via Signal to build the initial version.
+- **Johan Salo** – Refinements, LLM integrations (Ollama/Anthropic/OpenAI), and ongoing development in Claude Code.
+- **Claude** – AI pair programmer
+
 ## Features
 
 - **Smart Feed Curation**: Content-based filtering with exploration/exploitation balance
