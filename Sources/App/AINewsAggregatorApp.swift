@@ -3,11 +3,17 @@ import SwiftUI
 @main
 struct AINewsAggregatorApp: App {
     @StateObject private var appState = AppState()
-    
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(appState)
+            if hasCompletedOnboarding {
+                ContentView()
+                    .environmentObject(appState)
+            } else {
+                OnboardingView()
+                    .environmentObject(appState)
+            }
         }
         .commands {
             CommandGroup(replacing: .newItem) {}
