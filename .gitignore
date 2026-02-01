@@ -1,0 +1,20 @@
+# Build
+.build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store
+*.swp
+
+# IDE
+.idea/
+.vscode/
+
+# Package manager
+.swiftpm/
+
+# Secrets
+*.env
+.env.*
